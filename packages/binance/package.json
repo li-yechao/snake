@@ -1,0 +1,31 @@
+{
+  "name": "@snake/binance",
+  "version": "0.0.1",
+  "description": "Binance api",
+  "main": "dist/index.js",
+  "module": "esm/index.js",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "LiYechao",
+    "email": "liyechao@yechao.xyz"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/li-yechao/snake.git"
+  },
+  "scripts": {
+    "build": "npm run build:cjs && npm run build:esm",
+    "build:cjs": "tsc",
+    "build:esm": "tsc -m ESNext -t ESNEXT --outDir esm"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.2.0",
+    "typescript": "^4.4.4"
+  },
+  "dependencies": {
+    "cross-fetch": "^3.1.4",
+    "https-proxy-agent": "^5.0.0",
+    "isomorphic-ws": "^4.0.1",
+    "ws": "^8.2.3"
+  }
+}
