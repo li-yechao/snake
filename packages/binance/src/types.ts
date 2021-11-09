@@ -643,7 +643,7 @@ export type KlineItem = Array<any> & {
   10: string
 }
 
-export interface StreamEventMap {
+type TradeStreamEventMap = {
   trade: (e: Trade) => void
   aggTrade: (e: AggTrade) => void
   depth: (e: DepthUpdate) => void
@@ -670,40 +670,301 @@ export interface StreamEventMap {
   kline_1M: (e: Kline) => void
 }
 
-export type StreamEventType = keyof StreamEventMap
+export type TradeStreamEvents = {
+  [K in keyof TradeStreamEventMap as `${string}@${K}`]: TradeStreamEventMap[K]
+}
 
-export type StreamEventData = Parameters<StreamEventMap[keyof StreamEventMap]>[0]
+/**
+ * 订单类型
+ * https://www.binance.com/cn/support/articles/360033779452-Types-of-Order
+ *
+ * LIMIT: 限价单
+ * MARKET: 市价单
+ * STOP_LOSS: 止损单
+ * STOP_LOSS_LIMIT: 限价止损单
+ * TAKE_PROFIT: 止盈单
+ * TAKE_PROFIT_LIMIT: 限价止盈单
+ * LIMIT_MAKER: 限价只挂单
+ */
+export type OrderType =
+  | 'LIMIT'
+  | 'MARKET'
+  | 'STOP_LOSS'
+  | 'STOP_LOSS_LIMIT'
+  | 'TAKE_PROFIT'
+  | 'TAKE_PROFIT_LIMIT'
+  | 'LIMIT_MAKER'
 
-export namespace StreamEventDataType {
-  export function isTrade(d: StreamEventData): d is Trade {
-    return (d as Trade).e === 'trade'
-  }
+/**
+ * 订单方向
+ */
+export type OrderSide = 'BUY' | 'SELL'
 
-  export function isAggTrade(d: StreamEventData): d is AggTrade {
-    return (d as AggTrade).e === 'aggTrade'
-  }
+/**
+ * 有效方式
+ *
+ * GTC: 成交为止。订单会一直有效，直到被成交或者取消。
+ * IOC: 无法立即成交的部分就撤销。订单在失效前会尽量多的成交。
+ * FOK: 无法全部立即成交就撤销。如果无法全部成交，订单会失效。
+ */
+export type TimeInForce = 'GTC' | 'IOC' | 'FOK'
 
-  export function isDepthUpdate(d: StreamEventData): d is DepthUpdate {
-    return (d as DepthUpdate).e === 'depthUpdate'
-  }
+/**
+ * 订单执行类型
+ *
+ * NEW: 新订单
+ * CANCELED: 订单被取消
+ * REPLACED: (保留字段，当前未使用)
+ * REJECTED: 新订单被拒绝
+ * TRADE: 订单有新成交
+ * EXPIRED: 订单失效(根据订单的Time In Force参数)
+ */
+export type ExecutionType = 'NEW' | 'CANCELED' | 'REPLACED' | 'REJECTED' | 'TRADE' | 'EXPIRED'
 
-  export function isDepth(d: StreamEventData): d is Depth {
-    return typeof (d as Depth).lastUpdateId === 'number'
-  }
+/**
+ * 订单状态
+ *
+ * NEW: 订单被交易引擎接受
+ * PARTIALLY_FILLED: 部分订单被成交
+ * FILLED: 订单完全成交
+ * CANCELED: 用户撤销了订单
+ * PENDING_CANCEL: 撤销中(目前并未使用)
+ * REJECTED: 订单没有被交易引擎接受，也没被处理
+ * EXPIRED: 订单被交易引擎取消, 比如 LIMIT FOK 订单没有成交、市价单没有完全成交、强平期间被取消的订单、交易所维护期间被取消的订单
+ */
+export type OrderStatus =
+  | 'NEW'
+  | 'PARTIALLY_FILLED'
+  | 'FILLED'
+  | 'CANCELED'
+  | 'PENDING_CANCEL'
+  | 'REJECTED'
+  | 'EXPIRED'
 
-  export function isTicker(d: StreamEventData): d is Ticker {
-    return (d as Ticker).e === '24hrTicker'
-  }
+/**
+ * 账户更新事件
+ */
+export interface OutboundAccountPositionEvent {
+  /**
+   * 事件类型
+   */
+  e: 'outboundAccountPosition'
 
-  export function isMiniTicker(d: StreamEventData): d is MiniTicker {
-    return (d as MiniTicker).e === '24hrMiniTicker'
-  }
+  /**
+   * 事件时间
+   */
+  E: number
 
-  export function isBokTicker(d: StreamEventData): d is BookTicker {
-    return typeof (d as BookTicker).u === 'number'
-  }
+  /**
+   * 账户末次更新时间戳
+   */
+  u: number
 
-  export function isKline(d: StreamEventData): d is Kline {
-    return (d as Kline).e === 'kline'
-  }
+  /**
+   * 余额
+   */
+  B: [
+    {
+      /**
+       * 资产名称
+       */
+      a: string
+
+      /**
+       * 可用余额
+       */
+      f: string
+
+      /**
+       * 冻结余额
+       */
+      l: string
+    }
+  ]
+}
+
+/**
+ * 余额更新事件
+ */
+export interface BalanceUpdateEvent {
+  /**
+   * 余额更新事件
+   */
+  e: 'balanceUpdate'
+
+  /**
+   * 事件时间
+   */
+  E: number
+
+  /**
+   * 资产名称
+   */
+  a: string
+
+  /**
+   * 变动值
+   * +100 或 -100
+   */
+  d: string
+
+  /**
+   * Clear Time
+   */
+  T: number
+}
+
+/**
+ * 订单更新事件
+ */
+export interface ExecutionReportEvent {
+  /**
+   * 事件类型
+   */
+  e: 'executionReport'
+
+  /**
+   * 事件时间
+   */
+  E: number
+
+  /**
+   * 交易对
+   */
+  s: string
+
+  /**
+   * 自定义订单 ID
+   */
+  c: string
+
+  /**
+   * 订单方向
+   */
+  S: OrderSide
+
+  /**
+   * 订单类型
+   */
+  o: OrderType
+
+  /**
+   * 有效方式
+   */
+  f: TimeInForce
+
+  /**
+   * 订单原始数量
+   */
+  q: string
+
+  /**
+   * 订单原始价格
+   */
+  p: string
+
+  /**
+   * 止盈止损单触发价格
+   */
+  P: string
+
+  /**
+   * 冰山订单数量
+   */
+  F: string
+
+  /**
+   * OCO 订单 OrderListId
+   */
+  g: number
+
+  /**
+   * 原始订单自定义 ID (原始订单，指撤单操作的对象。撤单本身被视为另一个订单)
+   */
+  C: string
+
+  /**
+   * 本次事件的具体执行类型
+   */
+  x: ExecutionType
+
+  /**
+   * 订单的当前状态
+   */
+  X: OrderStatus
+
+  /**
+   * 订单被拒绝的原因
+   */
+  r: string
+
+  /**
+   * 订单 ID
+   */
+  i: number
+
+  /**
+   * 订单末次成交量
+   */
+  l: string
+
+  /**
+   * 订单累计已成交量
+   */
+  z: string
+
+  /**
+   * 订单末次成交价格
+   */
+  L: string
+
+  /**
+   * 手续费数量
+   */
+  n: string
+
+  /**
+   * 手续费资产类别
+   */
+  N: null
+
+  /**
+   * 成交时间
+   */
+  T: number
+
+  /**
+   * 成交 ID
+   */
+  t: number
+
+  /**
+   * 订单是否在订单簿上？
+   */
+  w: boolean
+
+  /**
+   * 该成交是作为挂单成交吗？
+   */
+  m: boolean
+
+  /**
+   * 订单创建时间
+   */
+  O: number
+
+  /**
+   * 订单累计已成交金额
+   */
+  Z: string
+
+  /**
+   * 订单末次成交金额
+   */
+  Y: string
+
+  /**
+   * Quote Order Qty
+   */
+  Q: string
 }

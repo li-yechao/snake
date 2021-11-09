@@ -13,32 +13,54 @@
 // limitations under the License.
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import WebSocket from 'isomorphic-ws';
+import { StrictEventEmitter, } from './StrictEventEmitter';
 const MAX_MESSAGE_ID = 1 << 16;
 const SEND_MESSAGE_RETRY_TIMEOUT = 300;
-export default class BinanceStream {
+export default class TradeStream extends StrictEventEmitter {
     options;
     constructor(options = {}) {
+        super();
         this.options = options;
-        this.socket = new WebSocket('wss://stream.binance.com/stream', {
+        this.ws = new WebSocket('wss://stream.binance.com/stream', {
             agent: options.proxy ? new HttpsProxyAgent(options.proxy) : undefined,
         });
-        this.socket.onmessage = e => {
+        this.ws.onmessage = e => {
             this.recv(e.data.toString());
         };
-        this.socket.onerror = e => {
+        this.ws.onerror = e => {
             console.error('error', e);
         };
-        this.socket.onclose = e => {
+        this.ws.onclose = e => {
             console.log('close', e.code, e.reason);
         };
+        this.ws.on('ping', () => {
+            this.ws.pong();
+        });
     }
-    _listeners = {};
+    on(ev, listener) {
+        super.on(ev, listener);
+        this.ensureSubscrbes(ev);
+        return this;
+    }
+    off(ev, listener) {
+        super.off(ev, listener);
+        this.ensureSubscrbes(ev);
+        return this;
+    }
+    ensureSubscrbes(ev) {
+        if (this.listeners(ev).length) {
+            this.send({ method: 'SUBSCRIBE', params: [ev] });
+        }
+        else {
+            this.send({ method: 'UNSUBSCRIBE', params: [ev] });
+        }
+    }
     messageId = 0;
     get nextMessageId() {
         this.messageId = (this.messageId + 1) % MAX_MESSAGE_ID;
         return this.messageId;
     }
-    socket;
+    ws;
     recv(s) {
         const m = JSON.parse(s);
         // Error
@@ -50,52 +72,17 @@ export default class BinanceStream {
         if (m.result === null) {
             return;
         }
-        const [symbol, type] = m.stream.split('@');
-        const set = this._listeners[type]?.get(symbol);
-        if (set) {
-            set.forEach(cb => cb(m.data));
-            return;
-        }
-        console.error('Invalid recv message', s);
+        this.emitReserved(m.stream, m.data);
     }
     async send(message) {
         while (true) {
             try {
-                this.socket.send(JSON.stringify({ ...message, id: this.nextMessageId }));
+                this.ws.send(JSON.stringify({ ...message, id: this.nextMessageId }));
                 return;
             }
             catch (error) {
                 await new Promise(resolve => setTimeout(resolve, this.options.sendMessageRetryTimeout || SEND_MESSAGE_RETRY_TIMEOUT));
             }
         }
-    }
-    _subscribe(type, symbol) {
-        this.send({ method: 'SUBSCRIBE', params: [`${symbol}@${type}`] });
-    }
-    _unsubscribe(type, symbol) {
-        this.send({ method: 'UNSUBSCRIBE', params: [`${symbol}@${type}`] });
-    }
-    subscribe(type, symbol, cb) {
-        symbol = symbol.toLowerCase();
-        let map = this._listeners[type];
-        if (!map) {
-            map = new Map();
-            this._listeners[type] = map;
-        }
-        const set = map.get(symbol) ?? new Set();
-        if (!map.has(symbol)) {
-            map.set(symbol, set);
-        }
-        if (set.size === 0) {
-            this._subscribe(type, symbol);
-        }
-        set.add(cb);
-        return {
-            cancel: () => {
-                if (set?.delete(cb) && set.size === 0) {
-                    this._unsubscribe(type, symbol);
-                }
-            },
-        };
     }
 }

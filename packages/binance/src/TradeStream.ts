@@ -14,7 +14,12 @@
 
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import WebSocket from 'isomorphic-ws'
-import { StreamEventMap, StreamEventType } from './types'
+import {
+  ReservedOrUserEventNames,
+  ReservedOrUserListener,
+  StrictEventEmitter,
+} from './StrictEventEmitter'
+import { TradeStreamEvents } from './types'
 
 const MAX_MESSAGE_ID = 1 << 16
 const SEND_MESSAGE_RETRY_TIMEOUT = 300
@@ -24,28 +29,58 @@ export interface TradeStreamOptions {
   proxy?: string
 }
 
-export default class BinanceStream {
+export default class TradeStream extends StrictEventEmitter<
+  TradeStreamEvents,
+  {},
+  TradeStreamEvents
+> {
   constructor(private options: TradeStreamOptions = {}) {
-    this.socket = new WebSocket('wss://stream.binance.com/stream', {
+    super()
+    this.ws = new WebSocket('wss://stream.binance.com/stream', {
       agent: options.proxy ? new HttpsProxyAgent(options.proxy) : undefined,
     })
 
-    this.socket.onmessage = e => {
+    this.ws.onmessage = e => {
       this.recv(e.data.toString())
     }
 
-    this.socket.onerror = e => {
+    this.ws.onerror = e => {
       console.error('error', e)
     }
 
-    this.socket.onclose = e => {
+    this.ws.onclose = e => {
       console.log('close', e.code, e.reason)
     }
+
+    this.ws.on('ping', () => {
+      this.ws.pong()
+    })
+  }
+  override on<Ev extends ReservedOrUserEventNames<TradeStreamEvents, TradeStreamEvents>>(
+    ev: Ev,
+    listener: ReservedOrUserListener<TradeStreamEvents, TradeStreamEvents, Ev>
+  ): this {
+    super.on(ev, listener)
+    this.ensureSubscrbes(ev)
+    return this
   }
 
-  private readonly _listeners: {
-    [k in keyof StreamEventMap]?: Map<string, Set<(e: Parameters<StreamEventMap[k]>[0]) => void>>
-  } = {}
+  override off<Ev extends ReservedOrUserEventNames<TradeStreamEvents, TradeStreamEvents>>(
+    ev: Ev,
+    listener: ReservedOrUserListener<TradeStreamEvents, TradeStreamEvents, Ev>
+  ): this {
+    super.off(ev, listener)
+    this.ensureSubscrbes(ev)
+    return this
+  }
+
+  private ensureSubscrbes(ev: any) {
+    if (this.listeners(ev).length) {
+      this.send({ method: 'SUBSCRIBE', params: [ev] })
+    } else {
+      this.send({ method: 'UNSUBSCRIBE', params: [ev] })
+    }
+  }
 
   private messageId = 0
   private get nextMessageId() {
@@ -53,7 +88,7 @@ export default class BinanceStream {
     return this.messageId
   }
 
-  private socket: WebSocket
+  private ws: WebSocket
 
   private recv(s: string) {
     const m = JSON.parse(s)
@@ -69,68 +104,19 @@ export default class BinanceStream {
       return
     }
 
-    const [symbol, type]: [string, StreamEventType] = m.stream.split('@')
-
-    const set = this._listeners[type]?.get(symbol)
-    if (set) {
-      set.forEach(cb => cb(m.data))
-      return
-    }
-
-    console.error('Invalid recv message', s)
+    this.emitReserved(m.stream, m.data)
   }
 
   private async send(message: { method: 'SUBSCRIBE' | 'UNSUBSCRIBE'; params: string[] }) {
     while (true) {
       try {
-        this.socket.send(JSON.stringify({ ...message, id: this.nextMessageId }))
+        this.ws.send(JSON.stringify({ ...message, id: this.nextMessageId }))
         return
       } catch (error) {
         await new Promise(resolve =>
           setTimeout(resolve, this.options.sendMessageRetryTimeout || SEND_MESSAGE_RETRY_TIMEOUT)
         )
       }
-    }
-  }
-
-  private _subscribe(type: keyof StreamEventMap, symbol: string) {
-    this.send({ method: 'SUBSCRIBE', params: [`${symbol}@${type}`] })
-  }
-
-  private _unsubscribe(type: keyof StreamEventMap, symbol: string) {
-    this.send({ method: 'UNSUBSCRIBE', params: [`${symbol}@${type}`] })
-  }
-
-  subscribe<K extends keyof StreamEventMap, E = (e: Parameters<StreamEventMap[K]>[0]) => void>(
-    type: K,
-    symbol: string,
-    cb: E
-  ) {
-    symbol = symbol.toLowerCase()
-
-    let map = this._listeners[type]
-    if (!map) {
-      map = new Map()
-      this._listeners[type] = map
-    }
-
-    const set: Set<any> = map.get(symbol) ?? new Set()
-    if (!map.has(symbol)) {
-      map.set(symbol, set)
-    }
-
-    if (set.size === 0) {
-      this._subscribe(type, symbol)
-    }
-
-    set.add(cb)
-
-    return {
-      cancel: () => {
-        if (set?.delete(cb) && set.size === 0) {
-          this._unsubscribe(type, symbol)
-        }
-      },
     }
   }
 }

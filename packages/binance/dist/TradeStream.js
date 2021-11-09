@@ -12,6 +12,21 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+var __extends = (this && this.__extends) || (function () {
+    var extendStatics = function (d, b) {
+        extendStatics = Object.setPrototypeOf ||
+            ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+            function (d, b) { for (var p in b) if (Object.prototype.hasOwnProperty.call(b, p)) d[p] = b[p]; };
+        return extendStatics(d, b);
+    };
+    return function (d, b) {
+        if (typeof b !== "function" && b !== null)
+            throw new TypeError("Class extends value " + String(b) + " is not a constructor or null");
+        extendStatics(d, b);
+        function __() { this.constructor = d; }
+        d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+    };
+})();
 var __assign = (this && this.__assign) || function () {
     __assign = Object.assign || function(t) {
         for (var s, i = 1, n = arguments.length; i < n; i++) {
@@ -65,29 +80,52 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 var https_proxy_agent_1 = require("https-proxy-agent");
 var isomorphic_ws_1 = __importDefault(require("isomorphic-ws"));
+var StrictEventEmitter_1 = require("./StrictEventEmitter");
 var MAX_MESSAGE_ID = 1 << 16;
 var SEND_MESSAGE_RETRY_TIMEOUT = 300;
-var BinanceStream = /** @class */ (function () {
-    function BinanceStream(options) {
-        var _this = this;
+var TradeStream = /** @class */ (function (_super) {
+    __extends(TradeStream, _super);
+    function TradeStream(options) {
         if (options === void 0) { options = {}; }
-        this.options = options;
-        this._listeners = {};
-        this.messageId = 0;
-        this.socket = new isomorphic_ws_1.default('wss://stream.binance.com/stream', {
+        var _this = _super.call(this) || this;
+        _this.options = options;
+        _this.messageId = 0;
+        _this.ws = new isomorphic_ws_1.default('wss://stream.binance.com/stream', {
             agent: options.proxy ? new https_proxy_agent_1.HttpsProxyAgent(options.proxy) : undefined,
         });
-        this.socket.onmessage = function (e) {
+        _this.ws.onmessage = function (e) {
             _this.recv(e.data.toString());
         };
-        this.socket.onerror = function (e) {
+        _this.ws.onerror = function (e) {
             console.error('error', e);
         };
-        this.socket.onclose = function (e) {
+        _this.ws.onclose = function (e) {
             console.log('close', e.code, e.reason);
         };
+        _this.ws.on('ping', function () {
+            _this.ws.pong();
+        });
+        return _this;
     }
-    Object.defineProperty(BinanceStream.prototype, "nextMessageId", {
+    TradeStream.prototype.on = function (ev, listener) {
+        _super.prototype.on.call(this, ev, listener);
+        this.ensureSubscrbes(ev);
+        return this;
+    };
+    TradeStream.prototype.off = function (ev, listener) {
+        _super.prototype.off.call(this, ev, listener);
+        this.ensureSubscrbes(ev);
+        return this;
+    };
+    TradeStream.prototype.ensureSubscrbes = function (ev) {
+        if (this.listeners(ev).length) {
+            this.send({ method: 'SUBSCRIBE', params: [ev] });
+        }
+        else {
+            this.send({ method: 'UNSUBSCRIBE', params: [ev] });
+        }
+    };
+    Object.defineProperty(TradeStream.prototype, "nextMessageId", {
         get: function () {
             this.messageId = (this.messageId + 1) % MAX_MESSAGE_ID;
             return this.messageId;
@@ -95,8 +133,7 @@ var BinanceStream = /** @class */ (function () {
         enumerable: false,
         configurable: true
     });
-    BinanceStream.prototype.recv = function (s) {
-        var _a;
+    TradeStream.prototype.recv = function (s) {
         var m = JSON.parse(s);
         // Error
         if (m.error) {
@@ -107,15 +144,9 @@ var BinanceStream = /** @class */ (function () {
         if (m.result === null) {
             return;
         }
-        var _b = m.stream.split('@'), symbol = _b[0], type = _b[1];
-        var set = (_a = this._listeners[type]) === null || _a === void 0 ? void 0 : _a.get(symbol);
-        if (set) {
-            set.forEach(function (cb) { return cb(m.data); });
-            return;
-        }
-        console.error('Invalid recv message', s);
+        this.emitReserved(m.stream, m.data);
     };
-    BinanceStream.prototype.send = function (message) {
+    TradeStream.prototype.send = function (message) {
         return __awaiter(this, void 0, void 0, function () {
             var error_1;
             var _this = this;
@@ -126,7 +157,7 @@ var BinanceStream = /** @class */ (function () {
                         _a.label = 1;
                     case 1:
                         _a.trys.push([1, 2, , 4]);
-                        this.socket.send(JSON.stringify(__assign(__assign({}, message), { id: this.nextMessageId })));
+                        this.ws.send(JSON.stringify(__assign(__assign({}, message), { id: this.nextMessageId })));
                         return [2 /*return*/];
                     case 2:
                         error_1 = _a.sent();
@@ -142,37 +173,6 @@ var BinanceStream = /** @class */ (function () {
             });
         });
     };
-    BinanceStream.prototype._subscribe = function (type, symbol) {
-        this.send({ method: 'SUBSCRIBE', params: [symbol + "@" + type] });
-    };
-    BinanceStream.prototype._unsubscribe = function (type, symbol) {
-        this.send({ method: 'UNSUBSCRIBE', params: [symbol + "@" + type] });
-    };
-    BinanceStream.prototype.subscribe = function (type, symbol, cb) {
-        var _this = this;
-        var _a;
-        symbol = symbol.toLowerCase();
-        var map = this._listeners[type];
-        if (!map) {
-            map = new Map();
-            this._listeners[type] = map;
-        }
-        var set = (_a = map.get(symbol)) !== null && _a !== void 0 ? _a : new Set();
-        if (!map.has(symbol)) {
-            map.set(symbol, set);
-        }
-        if (set.size === 0) {
-            this._subscribe(type, symbol);
-        }
-        set.add(cb);
-        return {
-            cancel: function () {
-                if ((set === null || set === void 0 ? void 0 : set.delete(cb)) && set.size === 0) {
-                    _this._unsubscribe(type, symbol);
-                }
-            },
-        };
-    };
-    return BinanceStream;
-}());
-exports.default = BinanceStream;
+    return TradeStream;
+}(StrictEventEmitter_1.StrictEventEmitter));
+exports.default = TradeStream;

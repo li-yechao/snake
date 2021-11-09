@@ -1,12 +1,13 @@
 import { AggTradeItem, HistoricalTradeItem, KlineInterval, KlineItem, TradeItem } from './types';
-export interface BinanceApiOptions {
+export interface ApiOptions {
     api?: string;
     apiKey?: string;
+    apiSecret?: string;
     proxy?: string;
 }
-export default class BinanceApi {
+export default class Api {
     private options;
-    constructor(options?: BinanceApiOptions);
+    constructor(options?: ApiOptions);
     private get agentOptions();
     private request;
     /**
@@ -70,4 +71,52 @@ export default class BinanceApi {
          */
         fromId?: number;
     }): Promise<HistoricalTradeItem[]>;
+    private userDataStreamListenKeyUrl;
+    createUserDataStream(args?: {
+        symbol?: undefined;
+        margin?: undefined;
+        isolated?: undefined;
+    } | {
+        symbol?: undefined;
+        margin: true;
+        isolated?: undefined;
+    } | {
+        symbol: string;
+        margin: true;
+        isolated: true;
+    }): Promise<{
+        listenKey: string;
+    }>;
+    updateUserDataStream(args: {
+        symbol?: undefined;
+        listenKey: string;
+        margin?: undefined;
+        isolated?: undefined;
+    } | {
+        symbol?: undefined;
+        listenKey: string;
+        margin: true;
+        isolated?: undefined;
+    } | {
+        symbol: string;
+        listenKey: string;
+        margin: true;
+        isolated: true;
+    }): Promise<{}>;
+    deleteUserDataStream(args: {
+        symbol?: undefined;
+        listenKey: string;
+        margin?: undefined;
+        isolated?: undefined;
+    } | {
+        symbol?: undefined;
+        listenKey: string;
+        margin: true;
+        isolated?: undefined;
+    } | {
+        symbol: string;
+        listenKey: string;
+        margin: true;
+        isolated: true;
+    }): Promise<{}>;
 }

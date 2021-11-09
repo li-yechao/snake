@@ -13,39 +13,3 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.StreamEventDataType = void 0;
-var StreamEventDataType;
-(function (StreamEventDataType) {
-    function isTrade(d) {
-        return d.e === 'trade';
-    }
-    StreamEventDataType.isTrade = isTrade;
-    function isAggTrade(d) {
-        return d.e === 'aggTrade';
-    }
-    StreamEventDataType.isAggTrade = isAggTrade;
-    function isDepthUpdate(d) {
-        return d.e === 'depthUpdate';
-    }
-    StreamEventDataType.isDepthUpdate = isDepthUpdate;
-    function isDepth(d) {
-        return typeof d.lastUpdateId === 'number';
-    }
-    StreamEventDataType.isDepth = isDepth;
-    function isTicker(d) {
-        return d.e === '24hrTicker';
-    }
-    StreamEventDataType.isTicker = isTicker;
-    function isMiniTicker(d) {
-        return d.e === '24hrMiniTicker';
-    }
-    StreamEventDataType.isMiniTicker = isMiniTicker;
-    function isBokTicker(d) {
-        return typeof d.u === 'number';
-    }
-    StreamEventDataType.isBokTicker = isBokTicker;
-    function isKline(d) {
-        return d.e === 'kline';
-    }
-    StreamEventDataType.isKline = isKline;
-})(StreamEventDataType = exports.StreamEventDataType || (exports.StreamEventDataType = {}));
