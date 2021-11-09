@@ -968,3 +968,56 @@ export interface ExecutionReportEvent {
    */
   Q: string
 }
+
+export interface IsolatedMarginAccountAssets {
+  assets: [
+    {
+      baseAsset: {
+        asset: string
+        borrowEnabled: boolean
+        borrowed: string
+        free: string
+        interest: string
+        locked: string
+        netAsset: string
+        netAssetOfBtc: string
+        repayEnabled: boolean
+        totalAsset: string
+      }
+      quoteAsset: {
+        asset: string
+        borrowEnabled: boolean
+        borrowed: string
+        free: string
+        interest: string
+        locked: string
+        netAsset: string
+        netAssetOfBtc: string
+        repayEnabled: boolean
+        totalAsset: string
+      }
+      symbol: string
+      isolatedCreated: boolean
+
+      /**
+       * 账户是否启用，true-启用，false-停用
+       */
+      enabled: boolean
+      marginLevel: string
+      marginLevelStatus:
+        | 'EXCESSIVE'
+        | 'NORMAL'
+        | 'MARGIN_CALL'
+        | 'PRE_LIQUIDATION'
+        | 'FORCE_LIQUIDATION'
+      marginRatio: string
+      indexPrice: string
+      liquidatePrice: string
+      liquidateRate: string
+      tradeEnabled: boolean
+    }
+  ]
+  totalAssetOfBtc: string
+  totalLiabilityOfBtc: string
+  totalNetAssetOfBtc: string
+}

@@ -1,3 +1,4 @@
+import { IsolatedMarginAccountAssets } from '.';
 import { AggTradeItem, HistoricalTradeItem, KlineInterval, KlineItem, TradeItem } from './types';
 export interface ApiOptions {
     api?: string;
@@ -10,6 +11,7 @@ export default class Api {
     constructor(options?: ApiOptions);
     private get agentOptions();
     private request;
+    private signRequest;
     /**
      * 获取服务器时间
      */
@@ -119,4 +121,13 @@ export default class Api {
         margin: true;
         isolated: true;
     }): Promise<{}>;
+    /**
+     * 查询杠杆逐仓账户信息 (USER_DATA)
+     *
+     * 不传 symbols 返回所有杠杆逐仓资产
+     */
+    isolatedMarginAccount({ symbols, recvWindow, }?: {
+        symbols?: string[];
+        recvWindow?: number;
+    }): Promise<IsolatedMarginAccountAssets>;
 }
