@@ -6,7 +6,7 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets'
-import { KlineInterval, KlineItem, StreamEventData, StreamEventType } from '@snake/binance'
+import { KlineInterval, KlineItem, TradeStreamEvents } from '@snake/binance'
 import { Server, Socket } from 'socket.io'
 import { BinanceService } from './binance.service'
 
@@ -21,9 +21,16 @@ export class BinanceGateway {
 
   @WebSocketServer()
   server!: Server<
+    {},
     {
-      subscribe: (payload: { type: StreamEventType; symbol: string }) => void
-      unsubscribe: (payload: { type: StreamEventType; symbol: string }) => void
+      stream: <T extends keyof TradeStreamEvents>(
+        stream: T,
+        data: Parameters<TradeStreamEvents[T]>[0]
+      ) => void
+    },
+    {
+      subscribe: (payload: (keyof TradeStreamEvents)[]) => void
+      unsubscribe: (payload: (keyof TradeStreamEvents)[]) => void
       klines: (
         payload: {
           symbol: string
@@ -37,26 +44,25 @@ export class BinanceGateway {
         },
         cb?: (res: KlineItem[]) => void
       ) => void
-    },
-    {
-      stream: (data: StreamEventData) => void
     }
   >
 
   @SubscribeMessage('subscribe')
   async subscribe(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() { type, symbol }: { type: StreamEventType; symbol: string }
+    @MessageBody() streams: (keyof TradeStreamEvents)[]
   ) {
-    await socket.join(`${symbol}@${type}`)
+    await socket.join(streams)
   }
 
   @SubscribeMessage('unsubscribe')
   async unsubscribe(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() { type, symbol }: { type: StreamEventType; symbol: string }
+    @MessageBody() streams: (keyof TradeStreamEvents)[]
   ) {
-    await socket.leave(`${symbol}@${type}`)
+    for (const stream of streams) {
+      await socket.leave(stream)
+    }
   }
 
   @SubscribeMessage('klines')
@@ -76,27 +82,36 @@ export class BinanceGateway {
     return this.binanceService.api.klines(payload)
   }
 
-  private subscribers: Map<string, () => void> = new Map()
+  private subscribers: Map<
+    keyof TradeStreamEvents,
+    (data: Parameters<TradeStreamEvents[keyof TradeStreamEvents]>[0]) => void
+  > = new Map()
 
   private init() {
     this.server.sockets.adapter
       .on('create-room', (room: string) => {
-        const m = room.match(/^(?<symbol>[a-zA-Z0-9]+)@(?<type>[a-zA-Z0-9_]+)$/)
-        if (m) {
-          const { symbol, type } = m.groups!
-          const { cancel } = this.binanceService.stream.subscribe(
-            type as StreamEventType,
-            symbol,
-            data => {
-              this.server.in(room).emit('stream', data)
-            }
-          )
-          this.subscribers.set(room, cancel)
+        if (room.match(/^(?<symbol>[a-zA-Z0-9]+)@(?<type>[a-zA-Z0-9_]+)$/)) {
+          const ev = room as keyof TradeStreamEvents
+          if (this.subscribers.has(ev)) {
+            return
+          }
+
+          const cb = (data: Parameters<TradeStreamEvents[typeof ev]>[0]) => {
+            this.server.in(room).emit('stream', ev, data)
+          }
+          this.subscribers.set(ev, cb)
+          this.binanceService.tradeStream.on(ev, cb)
         }
       })
       .on('delete-room', (room: string) => {
-        this.subscribers.get(room)?.()
-        this.subscribers.delete(room)
+        if (room.match(/^(?<symbol>[a-zA-Z0-9]+)@(?<type>[a-zA-Z0-9_]+)$/)) {
+          const ev = room as keyof TradeStreamEvents
+          const cb = this.subscribers.get(ev)
+          if (cb) {
+            this.subscribers.delete(ev)
+            this.binanceService.tradeStream.off(ev, cb)
+          }
+        }
       })
   }
 }

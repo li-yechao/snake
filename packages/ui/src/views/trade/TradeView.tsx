@@ -14,13 +14,7 @@
 
 import styled from '@emotion/styled'
 import { Box } from '@mui/material'
-import {
-  KlineInterval,
-  KlineItem,
-  StreamEventData,
-  StreamEventDataType,
-  StreamEventType,
-} from '@snake/binance'
+import { KlineInterval, KlineItem, TradeStreamEvents } from '@snake/binance'
 import produce from 'immer'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { Route, Routes, useParams } from 'react-router-dom'
@@ -48,11 +42,14 @@ function _TradeView() {
   const socket = useMemo(() => {
     const s: Socket<
       {
-        stream: (data: StreamEventData) => void
+        stream: <T extends keyof TradeStreamEvents, D = Parameters<TradeStreamEvents[T]>[0]>(
+          stream: T,
+          data: D
+        ) => void
       },
       {
-        subscribe: (payload: { type: StreamEventType; symbol: string }) => void
-        unsubscribe: (payload: { type: StreamEventType; symbol: string }) => void
+        subscribe: (payload: (keyof TradeStreamEvents)[]) => void
+        unsubscribe: (payload: (keyof TradeStreamEvents)[]) => void
         klines: (
           payload: {
             symbol: string
@@ -64,7 +61,7 @@ function _TradeView() {
              */
             limit?: number
           },
-          cb: (res: KlineItem[]) => void
+          cb?: (res: KlineItem[]) => void
         ) => void
       }
     > = io(SnakeSocketGateway)
@@ -104,11 +101,13 @@ function _TradeView() {
   }, [klines.value])
 
   useEffect(() => {
-    socket.emit('subscribe', { type: 'kline_1m', symbol })
+    const stream = `${symbol.toLowerCase()}@kline_1m` as const
+    socket.emit('subscribe', [stream])
 
-    socket.on('stream', n => {
-      if (StreamEventDataType.isKline(n) && n.s.toLowerCase() === symbol.toLowerCase()) {
-        window.document.title = `${symbol} ${n.k.c}`
+    socket.on('stream', (s, n) => {
+      if (s === stream) {
+        const d = n as unknown as Parameters<TradeStreamEvents[typeof stream]>[0]
+        window.document.title = `${symbol} ${d.k.c}`
 
         if (!data.current.length) {
           return
@@ -118,23 +117,23 @@ function _TradeView() {
           produce(data.current, draft => {
             const last = draft[data.current.length - 1]
 
-            if (last.t === n.k.t) {
-              last.o = n.k.o
-              last.c = n.k.c
-              last.h = n.k.h
-              last.l = n.k.l
-              last.v = n.k.v
-              last.q = n.k.q
-            } else if (last.T + 1 === n.k.t) {
+            if (last.t === d.k.t) {
+              last.o = d.k.o
+              last.c = d.k.c
+              last.h = d.k.h
+              last.l = d.k.l
+              last.v = d.k.v
+              last.q = d.k.q
+            } else if (last.T + 1 === d.k.t) {
               draft.push({
-                t: n.k.t,
-                T: n.k.T,
-                o: n.k.o,
-                c: n.k.c,
-                h: n.k.h,
-                l: n.k.l,
-                v: n.k.v,
-                q: n.k.q,
+                t: d.k.t,
+                T: d.k.T,
+                o: d.k.o,
+                c: d.k.c,
+                h: d.k.h,
+                l: d.k.l,
+                v: d.k.v,
+                q: d.k.q,
               })
             } else {
               throw new Error('Invalid last kline item')

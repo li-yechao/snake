@@ -1,16 +1,16 @@
 import { Injectable } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
-import { BinanceApi, BinanceStream } from '@snake/binance'
+import { Api, TradeStream } from '@snake/binance'
 
 @Injectable()
 export class BinanceService {
   constructor(private configService: ConfigService) {
     const proxy = this.configService.get<string>('proxy')
-    this.api = new BinanceApi({ proxy })
-    this.stream = new BinanceStream({ proxy })
+    this.api = new Api({ proxy })
+    this.tradeStream = new TradeStream({ proxy })
   }
 
-  readonly api: BinanceApi
+  readonly api: Api
 
-  readonly stream: BinanceStream
+  readonly tradeStream: TradeStream
 }

@@ -9,11 +9,8 @@ program
   .option('--cors', 'Enable cors', false)
   .requiredOption('-p, --port <port>', 'Listening port', '8080')
   .option('--proxy <proxy>', 'Proxy url used by binance api')
-  .action(async ({ cors, port, proxy }: { cors: boolean; port: string; proxy: string }) => {
-    Config.init({
-      port,
-      proxy,
-    })
+  .action(async ({ cors, port, proxy }: { cors: boolean; port: string; proxy?: string }) => {
+    Config.init({ port, proxy })
 
     const app = await NestFactory.create(AppModule)
 
